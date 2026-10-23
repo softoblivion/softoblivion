@@ -9,14 +9,15 @@ that cycles through what the apps do, a staggered reveal, drifting blobs, a pass
 written as an explicit `animation-delay`, so a renderer can shift the clock to any instant; it all stops under
 prefers-reduced-motion.
 
-Usage:  py -3 tools/make-cards.py [--fetch] [--out assets] [--only hero,card,lane,button,poster]
+Usage:  py -3 tools/make-cards.py [--fetch] [--out assets]
   --fetch   read the latest release tag of every repository from the GitHub API and store it in apps.json
-Stdlib only.
+Writes the assets (file names carry a content hash) and README.md. Stdlib only.
 """
 from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import pathlib
 import re
@@ -260,8 +261,9 @@ SPLIT = 1000                        # x where a row is cut: the left part links 
 def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 150) -> str:
     """One application row drawn once and cut into two images: `part` "repo" (icon, name, version chip,
     platform glyph, one line; the link to the repository) and `part` "get" (the download block; the link to the
-    latest release asset). Both carry the whole drawing and show their slice through the viewBox, so gradient,
-    blobs, glass and the animations continue across the seam."""
+    latest release asset). Both draw the same background (gradient, blobs, glass, sheen) in the row's
+    coordinates and show their slice through the viewBox, so the seam is invisible; each part contains only its
+    own foreground elements."""
     t = THEMES[theme]
     light = theme == "light"
     uid = "r-"
@@ -279,9 +281,16 @@ def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h:
     if part == "repo":
         vx, vw_ = 0, SPLIT
         label = f"{a['name']}: {a['line']}"
+        front = f'''<g class="rise" style="animation-delay:{d:.2f}s">{tile(uid, pad, ty, tsize, 24, icon_of(a, "ic-", pad, ty, tsize))}</g>
+    <g class="rise" style="animation-delay:{d + 0.12:.2f}s">
+      <text class="t" x="{tx}" y="{ny:.0f}" font-size="34" font-weight="700" letter-spacing="-0.02em">{esc(a['name'])}</text>
+      {chip(t, tx + name_w + gap, ccy - ch / 2, vw, ch, ver, 13)}{os_glyph(t, tx + name_w + gap + vw + gap, ccy - ch / 2, ch)}
+      <text class="t" x="{tx}" y="{ny + 36:.0f}" font-size="19" font-weight="450" fill-opacity="{t['ink2_op']}">{esc(a['line'])}</text>
+    </g>'''
     else:
         vx, vw_ = SPLIT, w - SPLIT
         label = f"Download {a['exe']}"
+        front = download_block(uid, a, w - pad, h / 2, t, d + 0.24)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{vw_}" height="{h}" viewBox="{vx} 0 {vw_} {h}" role="img" aria-label="{esc(label)}">
   <title>{esc(label)}</title>
   <defs>{defs_common(t, uid, a['accent'], a['hue'], a['bg'], light)}{filters(uid, t, 48)}
@@ -296,13 +305,7 @@ def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h:
     </g>
     <rect width="{w}" height="{h}" rx="26" fill="none" stroke="#ffffff" stroke-opacity="{t['frame']}" stroke-width="1.5"/>
     <rect class="shine" x="0" y="-40" width="220" height="{h + 80}" fill="url(#{uid}shine)"/>
-    <g class="rise" style="animation-delay:{d:.2f}s">{tile(uid, pad, ty, tsize, 24, icon_of(a, "ic-", pad, ty, tsize))}</g>
-    <g class="rise" style="animation-delay:{d + 0.12:.2f}s">
-      <text class="t" x="{tx}" y="{ny:.0f}" font-size="34" font-weight="700" letter-spacing="-0.02em">{esc(a['name'])}</text>
-      {chip(t, tx + name_w + gap, ccy - ch / 2, vw, ch, ver, 13)}{os_glyph(t, tx + name_w + gap + vw + gap, ccy - ch / 2, ch)}
-      <text class="t" x="{tx}" y="{ny + 36:.0f}" font-size="19" font-weight="450" fill-opacity="{t['ink2_op']}">{esc(a['line'])}</text>
-    </g>
-    {download_block(uid, a, w - pad, h / 2, t, d + 0.24)}
+    {front}
   </g>
 </svg>
 '''
@@ -320,11 +323,24 @@ def fetch_versions(cfg: dict) -> None:
         print(f"{a['repo']}: {tag}")
 
 
+def readme(cfg: dict, names: dict) -> str:
+    """The README: the hero, then per app the repository image and the download image on one line."""
+    def pic(key: str, alt: str, width: str) -> str:
+        return (f'<picture><source media="(prefers-color-scheme: light)" srcset="assets/{names[key + "-light"]}">'
+                f'<img src="assets/{names[key + "-dark"]}" alt="{esc(alt)}" width="{width}"></picture>')
+    o = cfg["owner"]
+    lines = ['<div align="center">', "", pic("hero", cfg["phrase"], "100%")]
+    for a in cfg["apps"]:
+        lines.append(f'<a href="https://github.com/{o}/{a["repo"]}">{pic("app-" + a["slug"], a["name"] + ": " + a["line"], "78.125%")}</a>'
+                     f'<a href="https://github.com/{o}/{a["repo"]}/releases/latest/download/{a["exe"]}">{pic("get-" + a["slug"], "Download " + a["exe"], "21.875%")}</a>')
+    lines += ["", "</div>", ""]
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fetch", action="store_true")
     ap.add_argument("--out", default=str(ROOT / "assets"))
-    ap.add_argument("--only", default="", help="comma list of kinds: hero,row")
     args = ap.parse_args()
     cfg_path = HERE / "apps.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -333,20 +349,27 @@ def main() -> int:
         cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    kinds = set(args.only.split(",")) if args.only else {"hero", "row"}
+    # Every file name carries a hash of its content: GitHub's image proxy keeps serving an SVG at an unchanged
+    # URL, so a changed asset must change its name. Stale files are removed first.
+    for old in out.glob("*.svg"):
+        old.unlink()
+    names: dict = {}
 
-    def write(name: str, text: str) -> None:
-        p = out / name
-        p.write_text(text, encoding="utf-8", newline="\n")
-        print(f"wrote {p.name} ({p.stat().st_size // 1024} KB)")
+    def write(key: str, text: str) -> None:
+        digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
+        name = f"{key}.{digest}.svg"
+        path = out / name
+        path.write_text(text, encoding="utf-8", newline="\n")
+        names[key] = name
+        print(f"wrote {name} ({path.stat().st_size // 1024} KB)")
 
     for theme in ("dark", "light"):
-        if "hero" in kinds:
-            write(f"hero-{theme}.svg", hero_band(cfg, theme))
+        write(f"hero-{theme}", hero_band(cfg, theme))
         for i, a in enumerate(cfg["apps"]):
-            if "row" in kinds:
-                write(f"row-{a['slug']}-{theme}.svg", row(a, cfg, theme, i, "repo"))
-                write(f"get-{a['slug']}-{theme}.svg", row(a, cfg, theme, i, "get"))
+            write(f"app-{a['slug']}-{theme}", row(a, cfg, theme, i, "repo"))
+            write(f"get-{a['slug']}-{theme}", row(a, cfg, theme, i, "get"))
+    (ROOT / "README.md").write_text(readme(cfg, names), encoding="utf-8", newline="\n")
+    print("wrote README.md")
     return 0
 
 
