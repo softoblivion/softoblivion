@@ -1,0 +1,91 @@
+{
+  "owner": "softoblivion",
+  "phrase": "Simple tools",
+  "apps": [
+    {
+      "slug": "premiere-deck",
+      "name": "Premiere Deck",
+      "repo": "premiere-deck",
+      "exe": "PremiereDeck.exe",
+      "line": "Media organizer and quick actions for Adobe Premiere Pro",
+      "accent": "#7563ff",
+      "hue": "#5f6f8c",
+      "bg": [
+        "#050607",
+        "#0d1014",
+        "#191d24"
+      ],
+      "icon": "premiere-deck.svg",
+      "icon_scale": 0.6,
+      "version": "2.2.0"
+    },
+    {
+      "slug": "media-saver",
+      "name": "Media Saver",
+      "repo": "media-saver",
+      "exe": "MediaSaver.exe",
+      "line": "Videos and audio from YouTube, Instagram, TikTok and X",
+      "accent": "#ff7a59",
+      "hue": "#2a5bd8",
+      "bg": [
+        "#02050b",
+        "#060d1e",
+        "#0b1838"
+      ],
+      "icon": "media-saver.svg",
+      "icon_scale": 0.72,
+      "version": "3.2.0"
+    },
+    {
+      "slug": "media-forge",
+      "name": "Media Forge",
+      "repo": "media-forge",
+      "exe": "MediaForge.exe",
+      "line": "Compress, upscale and convert video, photos and audio",
+      "accent": "#ff8a4a",
+      "hue": "#6a3df0",
+      "bg": [
+        "#05030c",
+        "#0f0922",
+        "#1c103e"
+      ],
+      "icon": "media-forge.svg",
+      "icon_scale": 0.7,
+      "version": "2.2.0"
+    },
+    {
+      "slug": "frame-notes",
+      "name": "Frame Notes",
+      "repo": "frame-notes",
+      "exe": "FrameNotes.exe",
+      "line": "Frame-accurate review notes for video editors",
+      "accent": "#5d8dff",
+      "hue": "#3a63d9",
+      "bg": [
+        "#0a0b0e",
+        "#14161b",
+        "#1b1e25"
+      ],
+      "icon": "frame-notes.svg",
+      "icon_scale": 0.62,
+      "version": "1.4.0"
+    },
+    {
+      "slug": "mic-control",
+      "name": "Mic Control",
+      "repo": "cute-mic-control",
+      "exe": "MicControl.exe",
+      "line": "A hotkey that mutes the microphone, a heart that shows it",
+      "accent": "#3ee6b8",
+      "hue": "#d2409a",
+      "bg": [
+        "#0b0308",
+        "#1d0916",
+        "#371128"
+      ],
+      "icon": "mic-control.png",
+      "icon_scale": 0.7,
+      "version": "2.2.0"
+    }
+  ]
+}
