@@ -60,7 +60,7 @@ def font_face() -> str:
 def load_icon(path: pathlib.Path, prefix: str, x: float, y: float, size: float) -> str:
     data = path.read_bytes()
     if path.suffix.lower() == ".svg":
-        text = data.decode("utf-8")
+        text = data.decode("utf-8").replace("\r\n", "\n")     # the output's hash must not depend on the checkout's line endings
         text = re.sub(r"<\?xml[^>]*\?>", "", text)
         text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
         for i in sorted(set(re.findall(r'\bid="([^"]+)"', text)), key=len, reverse=True):
