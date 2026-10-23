@@ -4,10 +4,9 @@ images (the repository link and the download link).
 Every asset is written twice, for the dark and the light theme, and the README picks one through <picture>.
 The look follows the hero banners of the application repositories: a dark gradient in the app's theme colours,
 blurred drifting blobs, a glass tile around the app icon, one type family embedded as a data URI so the
-SVG needs no external resource. Animation is CSS inside the SVG (a soft wipe on the headline, a typed line
-that cycles through what the apps do, a staggered reveal, drifting blobs, a passing highlight); every delay is
-written as an explicit `animation-delay`, so a renderer can shift the clock to any instant; it all stops under
-prefers-reduced-motion.
+SVG needs no external resource. Animation is CSS inside the SVG (a soft rise and fade on load, slowly drifting
+blobs); every delay is written as an explicit `animation-delay`, so a renderer can shift the clock to any
+instant; it all stops under prefers-reduced-motion.
 
 Usage:  py -3 tools/make-cards.py [--fetch] [--out assets]
   --fetch   read the latest release tag of every repository from the GitHub API and store it in apps.json
@@ -33,14 +32,14 @@ THEMES = {
     "dark": {
         "ink": "#ffffff", "ink2_op": 0.72, "ink3_op": 0.46,
         "tile_a": 0.16, "tile_b": 0.04, "rim_a": 0.75, "rim_b": 0.12, "rim_c": 0.35,
-        "blob_hue": 0.85, "blob_acc": 0.75, "shine": 0.10, "shadow": 0.45,
-        "chip": 0.10, "chip_rim": 0.18, "frame": 0.12, "caret": "#ff7a59",
+        "blob_hue": 0.85, "blob_acc": 0.75, "shadow": 0.45,
+        "frame": 0.12,
     },
     "light": {
         "ink": "#0b1020", "ink2_op": 0.70, "ink3_op": 0.48,
         "tile_a": 0.85, "tile_b": 0.55, "rim_a": 1.0, "rim_b": 0.6, "rim_c": 0.9,
-        "blob_hue": 0.55, "blob_acc": 0.50, "shine": 0.35, "shadow": 0.18,
-        "chip": 0.55, "chip_rim": 0.9, "frame": 0.9, "caret": "#ff6a44",
+        "blob_hue": 0.55, "blob_acc": 0.50, "shadow": 0.18,
+        "frame": 0.9,
     },
 }
 BRAND_ACCENT, BRAND_HUE = "#7a8cff", "#ff7a59"
@@ -112,12 +111,6 @@ def defs_common(t: dict, uid: str, accent: str, hue: str, bg: list[str], light: 
     <linearGradient id="{uid}rim" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="{t['rim_a']}"/><stop offset="0.45" stop-color="#ffffff" stop-opacity="{t['rim_b']}"/><stop offset="1" stop-color="#ffffff" stop-opacity="{t['rim_c']}"/>
     </linearGradient>
-    <linearGradient id="{uid}line" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="{accent}" stop-opacity="0.95"/><stop offset="1" stop-color="{accent}" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="{uid}shine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="{t['shine']}"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
     <linearGradient id="{uid}pill" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="{accent}"/><stop offset="1" stop-color="{accent}" stop-opacity="0.78"/>
     </linearGradient>'''
@@ -127,17 +120,15 @@ def style_common(t: dict, extra: str = "") -> str:
     return f'''<style>
     {font_face()}
     .t{{font-family:{FONT};fill:{t['ink']};}}
-    .tg,.wordclip{{font-family:{FONT};}}
+    .tg{{font-family:{FONT};}}
     .b1{{animation:drift1 26s ease-in-out infinite alternate;animation-delay:0s;}}
     .b2{{animation:drift2 31s ease-in-out infinite alternate;animation-delay:0s;}}
     .rise{{opacity:0;animation:rise .9s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:0s;}}
-    .shine{{animation:shine 9s ease-in-out infinite;animation-delay:0s;}}
     @keyframes drift1{{from{{transform:translate(0,0)}}to{{transform:translate(70px,-30px)}}}}
     @keyframes drift2{{from{{transform:translate(0,0)}}to{{transform:translate(-80px,40px)}}}}
     @keyframes rise{{from{{opacity:0;transform:translateY(14px)}}to{{opacity:1;transform:translateY(0)}}}}
-    @keyframes shine{{0%{{transform:translateX(-420px) skewX(-18deg)}}22%{{transform:translateX(1700px) skewX(-18deg)}}100%{{transform:translateX(1700px) skewX(-18deg)}}}}
     {extra}
-    @media (prefers-reduced-motion:reduce){{*{{animation:none!important}}.rise{{opacity:1}}.wipe{{transform:translateX(2000px)}}.w{{width:0}}.w0{{width:1000px}}.caret{{opacity:0}}.word{{opacity:1}}.sheen{{opacity:0}}}}
+    @media (prefers-reduced-motion:reduce){{*{{animation:none!important}}.rise,.word{{opacity:1}}}}
   </style>'''
 
 
@@ -149,41 +140,13 @@ def tile(uid: str, x: float, y: float, size: float, radius: float, icon: str) ->
 def filters(uid: str, t: dict, blur: int = 60) -> str:
     return f'''
     <filter id="{uid}blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="{blur}"/></filter>
-    <filter id="{uid}shadow" x="-20%" y="-20%" width="140%" height="140%">
+    <filter id="{uid}shadow" x="-30%" y="-40%" width="160%" height="220%">
       <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="{t['shadow']}"/></filter>'''
 
 
-def pill(uid: str, x: float, y: float, w: float, h: float, label: str, size: int = 17, delay: float = 0.0) -> str:
-    """A filled accent pill with white text (the Download button of the app READMEs)."""
-    return (f'<g class="rise" style="animation-delay:{delay:.2f}s">'
-            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{h / 2:.1f}" fill="url(#{uid}pill)" filter="url(#{uid}shadow)"/>'
-            f'<text class="t" x="{x + w / 2:.1f}" y="{y + h / 2 + size * 0.36:.1f}" text-anchor="middle" '
-            f'font-size="{size}" font-weight="650" fill="#ffffff" letter-spacing="0.01em">{esc(label)}</text></g>')
-
-
-def chip(t: dict, x: float, y: float, w: float, h: float, label: str, size: int = 15) -> str:
-    """A glass chip with a short label (version, stack item)."""
-    return (f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="{h / 2:.1f}" '
-            f'fill="#ffffff" fill-opacity="{t["chip"]}" stroke="#ffffff" stroke-opacity="{t["chip_rim"]}" stroke-width="1"/>'
-            f'<text class="t" x="{x + w / 2:.1f}" y="{y + h / 2 + size * 0.35:.1f}" text-anchor="middle" '
-            f'font-size="{size}" font-weight="600" fill-opacity="{t["ink2_op"]}" letter-spacing="0.04em">{esc(label)}</text>')
-
-
-def os_glyph(t: dict, x: float, y: float, h: float) -> str:
-    """A glass chip with the four-pane Windows mark: the platform of the app."""
-    g = h * 0.46
-    gx, gy = x + (h - g) / 2, y + (h - g) / 2
-    q = g * 0.46
-    panes = "".join(f'<rect x="{gx + dx:.1f}" y="{gy + dy:.1f}" width="{q:.1f}" height="{q:.1f}" rx="1"/>'
-                    for dx, dy in ((0, 0), (g - q, 0), (0, g - q), (g - q, g - q)))
-    return (f'<g><title>Windows</title><rect x="{x:.1f}" y="{y:.1f}" width="{h:.1f}" height="{h:.1f}" rx="{h / 2:.1f}" '
-            f'fill="#ffffff" fill-opacity="{t["chip"]}" stroke="#ffffff" stroke-opacity="{t["chip_rim"]}" stroke-width="1"/>'
-            f'<g fill="{t["ink"]}" fill-opacity="{t["ink2_op"]}">{panes}</g></g>')
-
-
 def wordmark(cfg: dict, t: dict, uid: str, cx: float, y: float, size: int, light: bool) -> tuple[str, str, str]:
-    """The phrase of the page, centred at `cx`: Sora 650, a quiet two-tone gradient, a faint glow, a soft
-    rise on load and a slow sheen every few seconds. Returns (defs, css, body)."""
+    """The phrase of the page, centred at `cx`: Sora 650, a quiet two-tone gradient, a faint glow and a soft
+    rise on load. Returns (defs, css, body)."""
     word = cfg["phrase"]
     ww = text_w(word, size, 650)
     c1, c2 = ("#b8512f", "#4f58c4") if light else ("#ffd3c4", "#c8c6ff")
@@ -193,21 +156,14 @@ def wordmark(cfg: dict, t: dict, uid: str, cx: float, y: float, size: int, light
     <linearGradient id="{uid}ink" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0" stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/>
     </linearGradient>
-    <linearGradient id="{uid}sheen" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset="0.5" stop-color="#ffffff" stop-opacity="{0.35 if light else 0.45}"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="{uid}glow" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="{size * 0.2:.0f}"/></filter>
-    <clipPath id="{uid}word"><text class="tg" {attrs}>{esc(word)}</text></clipPath>'''
+    <filter id="{uid}glow" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="{size * 0.2:.0f}"/></filter>'''
     css = f'''
     .word{{animation:wordrise 1.4s cubic-bezier(.2,.7,.2,1) forwards;animation-delay:.1s;opacity:0;}}
-    @keyframes wordrise{{from{{opacity:0;transform:translateY(10px)}}to{{opacity:1;transform:translateY(0)}}}}
-    .sheen{{animation:sheen 9s ease-in-out infinite;animation-delay:2.2s;}}
-    @keyframes sheen{{0%{{transform:translateX({-ww / 2 - 80:.0f}px) skewX(-20deg)}}24%{{transform:translateX({ww / 2 + 80:.0f}px) skewX(-20deg)}}100%{{transform:translateX({ww / 2 + 80:.0f}px) skewX(-20deg)}}}}'''
+    @keyframes wordrise{{from{{opacity:0;transform:translateY(10px)}}to{{opacity:1;transform:translateY(0)}}}}'''
     body = f'''
     <g class="word">
       <g filter="url(#{uid}glow)" opacity="{0.35 if light else 0.5}"><text class="tg" fill="url(#{uid}ink)" {attrs}>{esc(word)}</text></g>
       <text class="tg" fill="url(#{uid}ink)" {attrs}>{esc(word)}</text>
-      <g clip-path="url(#{uid}word)"><rect class="sheen" x="{cx - size * 0.4:.0f}" y="{y - size:.0f}" width="{size * 0.8:.0f}" height="{size * 1.4:.0f}" fill="url(#{uid}sheen)"/></g>
     </g>'''
     return defs, css, body
 
@@ -241,29 +197,66 @@ def hero_band(cfg: dict, theme: str, w: int = 1280, h: int = 96) -> str:
 '''
 
 
-def download_block(uid: str, a: dict, x_right: float, cy: float, t: dict, delay: float) -> str:
-    """The download control of a row: an accent block with the download mark, "Download" and the exe name."""
+def mix(c1: str, c2: str, k: float) -> str:
+    """`c1` moved towards `c2` by the fraction `k` (hex colours)."""
+    a = [int(c1.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    b = [int(c2.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    return "#" + "".join(f"{round(x + (y - x) * k):02x}" for x, y in zip(a, b))
+
+
+def meta_line(a: dict, cx: float, cy: float, light: bool) -> str:
+    """The version chip and the platform glyph of an app on one line centred at (cx, cy): same height, one gap,
+    the app's accent at reduced opacity."""
+    h, gap, size = 24, 8, 12
+    ver = f"v{a['version']}"
+    vw = text_w(ver, size, 600) + 22
+    total = vw + gap + h
+    x0 = cx - total / 2
+    y0 = cy - h / 2
+    ink = mix(a["accent"], "#0b1020", 0.45) if light else a["accent"]
+    fill_op, rim_op = (0.14, 0.45) if light else (0.16, 0.42)
+    g = h * 0.44
+    gx, gy = x0 + vw + gap + (h - g) / 2, cy - g / 2
+    q = g * 0.46
+    panes = "".join(f'<rect x="{gx + dx:.1f}" y="{gy + dy:.1f}" width="{q:.1f}" height="{q:.1f}" rx="0.8"/>'
+                    for dx, dy in ((0, 0), (g - q, 0), (0, g - q), (g - q, g - q)))
+    pill = (f'fill="{a["accent"]}" fill-opacity="{fill_op}" stroke="{a["accent"]}" stroke-opacity="{rim_op}" '
+            f'stroke-width="1"')
+    return (f'<rect x="{x0:.1f}" y="{y0:.1f}" width="{vw:.1f}" height="{h}" rx="{h / 2}" {pill}/>'
+            f'<text class="t" x="{x0 + vw / 2:.1f}" y="{cy + size * 0.35:.1f}" text-anchor="middle" font-size="{size}" '
+            f'font-weight="600" style="fill:{ink};fill-opacity:0.92" letter-spacing="0.04em">{esc(ver)}</text>'
+            f'<g><title>Windows</title><rect x="{x0 + vw + gap:.1f}" y="{y0:.1f}" width="{h}" height="{h}" rx="{h / 2}" {pill}/>'
+            f'<g fill="{ink}" fill-opacity="0.92">{panes}</g></g>')
+
+
+def download_block(uid: str, a: dict, x_right: float, cy: float, t: dict, delay: float, light: bool) -> str:
+    """The download part of a row, centred on `cy` as one group: an accent block with the download mark,
+    "Download" and the exe name, and under it the version chip and the platform glyph."""
     bw, bh = 236, 62
-    x, y = x_right - bw, cy - bh / 2
+    line_gap, line_h = 10, 24
+    top = cy - (bh + line_gap + line_h) / 2
+    x, y = x_right - bw, top
+    bcy = y + bh / 2
     mx = x + 24
     tx = x + 58
     return f'''<g class="rise" style="animation-delay:{delay:.2f}s">
       <rect x="{x:.0f}" y="{y:.0f}" width="{bw}" height="{bh}" rx="18" fill="url(#{uid}pill)" filter="url(#{uid}shadow)"/>
-      <path d="M{mx + 8:.0f} {cy - 10:.0f} v12 m-6 -5 l6 6 l6 -6 M{mx:.0f} {cy + 9:.0f} h16" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text class="t" x="{tx:.0f}" y="{cy - 3:.0f}" font-size="18" font-weight="650" fill="#ffffff">Download</text>
-      <text class="t" x="{tx:.0f}" y="{cy + 17:.0f}" font-size="13" font-weight="600" fill="#ffffff" fill-opacity="0.82" letter-spacing="0.03em">{esc(a['exe'])}</text>
-    </g>'''
+      <path d="M{mx + 8:.0f} {bcy - 10:.0f} v12 m-6 -5 l6 6 l6 -6 M{mx:.0f} {bcy + 9:.0f} h16" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text class="t" x="{tx:.0f}" y="{bcy - 3:.0f}" font-size="18" font-weight="650" style="fill:#ffffff">Download</text>
+      <text class="t" x="{tx:.0f}" y="{bcy + 17:.0f}" font-size="13" font-weight="600" style="fill:#ffffff;fill-opacity:0.85" letter-spacing="0.03em">{esc(a['exe'])}</text>
+    </g>
+    <g class="rise" style="animation-delay:{delay + 0.12:.2f}s">{meta_line(a, x + bw / 2, y + bh + line_gap + line_h / 2, light)}</g>'''
 
 
 SPLIT = 1000                        # x where a row is cut: the left part links to the repository, the right part to the asset
 
 
 def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 150) -> str:
-    """One application row drawn once and cut into two images: `part` "repo" (icon, name, version chip,
-    platform glyph, one line; the link to the repository) and `part` "get" (the download block; the link to the
-    latest release asset). Both draw the same background (gradient, blobs, glass, sheen) in the row's
-    coordinates and show their slice through the viewBox, so the seam is invisible; each part contains only its
-    own foreground elements."""
+    """One application row drawn once and cut into two images: `part` "repo" (icon, name, one line; the link
+    to the repository) and `part` "get" (the download block with the version chip and the platform glyph under
+    it; the link to the latest release asset). Both draw the same background (gradient, blobs, glass) in the
+    row's coordinates and show their slice through the viewBox, so the seam is invisible; each part contains
+    only its own foreground elements."""
     t = THEMES[theme]
     light = theme == "light"
     uid = "r-"
@@ -272,11 +265,6 @@ def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h:
     ty = (h - tsize) / 2
     tx = pad + tsize + 30
     ny = h / 2 - 4
-    ver = f"v{a['version']}"
-    vw = text_w(ver, 13, 600) + 24
-    name_w = text_w(a["name"], 34, 700)
-    ch, gap = 26, 16
-    ccy = ny - 12
     d = 0.2 + index * 0.12
     if part == "repo":
         vx, vw_ = 0, SPLIT
@@ -284,19 +272,18 @@ def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h:
         front = f'''<g class="rise" style="animation-delay:{d:.2f}s">{tile(uid, pad, ty, tsize, 24, icon_of(a, "ic-", pad, ty, tsize))}</g>
     <g class="rise" style="animation-delay:{d + 0.12:.2f}s">
       <text class="t" x="{tx}" y="{ny:.0f}" font-size="34" font-weight="700" letter-spacing="-0.02em">{esc(a['name'])}</text>
-      {chip(t, tx + name_w + gap, ccy - ch / 2, vw, ch, ver, 13)}{os_glyph(t, tx + name_w + gap + vw + gap, ccy - ch / 2, ch)}
       <text class="t" x="{tx}" y="{ny + 36:.0f}" font-size="19" font-weight="450" fill-opacity="{t['ink2_op']}">{esc(a['line'])}</text>
     </g>'''
     else:
         vx, vw_ = SPLIT, w - SPLIT
-        label = f"Download {a['exe']}"
-        front = download_block(uid, a, w - pad, h / 2, t, d + 0.24)
+        label = f"Download {a['exe']} (v{a['version']}, Windows)"
+        front = download_block(uid, a, w - pad, h / 2, t, d + 0.24, light)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{vw_}" height="{h}" viewBox="{vx} 0 {vw_} {h}" role="img" aria-label="{esc(label)}">
   <title>{esc(label)}</title>
   <defs>{defs_common(t, uid, a['accent'], a['hue'], a['bg'], light)}{filters(uid, t, 48)}
     <clipPath id="{uid}frame"><rect width="{w}" height="{h}" rx="26"/></clipPath>
   </defs>
-  {style_common(t, f".shine{{animation-delay:{index * 1.1:.1f}s}}")}
+  {style_common(t)}
   <g clip-path="url(#{uid}frame)">
     <rect width="{w}" height="{h}" fill="url(#{uid}bg)"/>
     <g filter="url(#{uid}blur)">
@@ -304,7 +291,6 @@ def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h:
       <circle class="b2" cx="{w * 0.3:.0f}" cy="{h * 1.4:.0f}" r="170" fill="url(#{uid}ba)"/>
     </g>
     <rect width="{w}" height="{h}" rx="26" fill="none" stroke="#ffffff" stroke-opacity="{t['frame']}" stroke-width="1.5"/>
-    <rect class="shine" x="0" y="-40" width="220" height="{h + 80}" fill="url(#{uid}shine)"/>
     {front}
   </g>
 </svg>
