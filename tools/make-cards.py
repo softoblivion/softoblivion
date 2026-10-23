@@ -1,4 +1,5 @@
-"""SVG assets of the profile README: the hero band with the phrase and one row per application.
+"""SVG assets of the profile README: the hero band with the phrase and, per application, one row cut into two
+images (the repository link and the download link).
 
 Every asset is written twice, for the dark and the light theme, and the README picks one through <picture>.
 The look follows the hero banners of the application repositories: a dark gradient in the app's theme colours,
@@ -17,7 +18,6 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import os
 import pathlib
 import re
 import sys
@@ -254,9 +254,14 @@ def download_block(uid: str, a: dict, x_right: float, cy: float, t: dict, delay:
     </g>'''
 
 
-def row(a: dict, cfg: dict, theme: str, index: int, w: int = 1280, h: int = 150) -> str:
-    """One application row, the click target of its download: icon tile, name, version chip, platform glyph,
-    one line, and the download block on the right, all on the row's own glass card."""
+SPLIT = 1000                        # x where a row is cut: the left part links to the repository, the right part to the asset
+
+
+def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 150) -> str:
+    """One application row drawn once and cut into two images: `part` "repo" (icon, name, version chip,
+    platform glyph, one line; the link to the repository) and `part` "get" (the download block; the link to the
+    latest release asset). Both carry the whole drawing and show their slice through the viewBox, so gradient,
+    blobs, glass and the animations continue across the seam."""
     t = THEMES[theme]
     light = theme == "light"
     uid = "r-"
@@ -271,8 +276,14 @@ def row(a: dict, cfg: dict, theme: str, index: int, w: int = 1280, h: int = 150)
     ch, gap = 26, 16
     ccy = ny - 12
     d = 0.2 + index * 0.12
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}" role="img" aria-label="{esc(a['name'])}: download {esc(a['exe'])}">
-  <title>{esc(a['name'])}: download {esc(a['exe'])}</title>
+    if part == "repo":
+        vx, vw_ = 0, SPLIT
+        label = f"{a['name']}: {a['line']}"
+    else:
+        vx, vw_ = SPLIT, w - SPLIT
+        label = f"Download {a['exe']}"
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{vw_}" height="{h}" viewBox="{vx} 0 {vw_} {h}" role="img" aria-label="{esc(label)}">
+  <title>{esc(label)}</title>
   <defs>{defs_common(t, uid, a['accent'], a['hue'], a['bg'], light)}{filters(uid, t, 48)}
     <clipPath id="{uid}frame"><rect width="{w}" height="{h}" rx="26"/></clipPath>
   </defs>
@@ -302,10 +313,7 @@ def row(a: dict, cfg: dict, theme: str, index: int, w: int = 1280, h: int = 150)
 def fetch_versions(cfg: dict) -> None:
     for a in cfg["apps"]:
         url = f"https://api.github.com/repos/{cfg['owner']}/{a['repo']}/releases/latest"
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "profile-cards"}
-        if os.environ.get("GITHUB_TOKEN"):
-            headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
-        req = urllib.request.Request(url, headers=headers)
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "profile-cards"})
         with urllib.request.urlopen(req, timeout=30) as r:
             tag = json.load(r)["tag_name"]
         a["version"] = tag.lstrip("v")
@@ -337,7 +345,8 @@ def main() -> int:
             write(f"hero-{theme}.svg", hero_band(cfg, theme))
         for i, a in enumerate(cfg["apps"]):
             if "row" in kinds:
-                write(f"row-{a['slug']}-{theme}.svg", row(a, cfg, theme, i))
+                write(f"row-{a['slug']}-{theme}.svg", row(a, cfg, theme, i, "repo"))
+                write(f"get-{a['slug']}-{theme}.svg", row(a, cfg, theme, i, "get"))
     return 0
 
 
