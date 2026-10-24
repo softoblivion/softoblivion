@@ -17,7 +17,7 @@
       ],
       "icon": "premiere-deck.svg",
       "icon_scale": 0.6,
-      "version": "2.2.0"
+      "version": "3.0.0"
     },
     {
       "slug": "media-saver",
@@ -68,7 +68,7 @@
       ],
       "icon": "frame-notes.svg",
       "icon_scale": 0.62,
-      "version": "1.4.0"
+      "version": "1.4.1"
     },
     {
       "slug": "mic-control",
@@ -85,7 +85,7 @@
       ],
       "icon": "mic-control.png",
       "icon_scale": 0.7,
-      "version": "2.2.0"
+      "version": "2.3.0"
     }
   ]
 }
