@@ -1,14 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="280" height="150" viewBox="1000 0 280 150" role="img" aria-label="Download FrameNotes.exe (v1.4.1, Windows)">
-  <title>Download FrameNotes.exe (v1.4.1, Windows)</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="150" viewBox="1000 0 280 150" role="img" aria-label="Download Retake.exe (v2.0.0, Windows)">
+  <title>Download Retake.exe (v2.0.0, Windows)</title>
   <defs>
     <linearGradient id="r-bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0a0b0e"/><stop offset="0.55" stop-color="#14161b"/><stop offset="1" stop-color="#1b1e25"/>
+      <stop offset="0" stop-color="#050607"/><stop offset="0.55" stop-color="#0d1014"/><stop offset="1" stop-color="#191d24"/>
     </linearGradient>
     <radialGradient id="r-bh" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#3a63d9" stop-opacity="0.85"/><stop offset="1" stop-color="#3a63d9" stop-opacity="0"/>
+      <stop offset="0" stop-color="#5f6f8c" stop-opacity="0.85"/><stop offset="1" stop-color="#5f6f8c" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="r-ba" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#5d8dff" stop-opacity="0.75"/><stop offset="1" stop-color="#5d8dff" stop-opacity="0"/>
+      <stop offset="0" stop-color="#7563ff" stop-opacity="0.75"/><stop offset="1" stop-color="#7563ff" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="r-tile" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.04"/>
@@ -17,7 +17,7 @@
       <stop offset="0" stop-color="#ffffff" stop-opacity="0.75"/><stop offset="0.45" stop-color="#ffffff" stop-opacity="0.12"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.35"/>
     </linearGradient>
     <linearGradient id="r-pill" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5d8dff"/><stop offset="1" stop-color="#5d8dff" stop-opacity="0.78"/>
+      <stop offset="0" stop-color="#7563ff"/><stop offset="1" stop-color="#7563ff" stop-opacity="0.78"/>
     </linearGradient>
     <filter id="r-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="48"/></filter>
     <filter id="r-shadow" x="-30%" y="-40%" width="160%" height="220%">
@@ -48,8 +48,8 @@
       <rect x="1016" y="27" width="236" height="62" rx="18" fill="url(#r-pill)" filter="url(#r-shadow)"/>
       <path d="M1048 48 v12 m-6 -5 l6 6 l6 -6 M1040 67 h16" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
       <text class="t" x="1074" y="55" font-size="18" font-weight="650" style="fill:#ffffff">Download</text>
-      <text class="t" x="1074" y="75" font-size="13" font-weight="600" style="fill:#ffffff;fill-opacity:0.85" letter-spacing="0.03em">FrameNotes.exe</text>
+      <text class="t" x="1074" y="75" font-size="13" font-weight="600" style="fill:#ffffff;fill-opacity:0.85" letter-spacing="0.03em">Retake.exe</text>
     </g>
-    <g class="rise" style="animation-delay:0.92s"><rect x="1083.1" y="99.0" width="69.8" height="24" rx="12.0" fill="#5d8dff" fill-opacity="0.16" stroke="#5d8dff" stroke-opacity="0.42" stroke-width="1"/><text class="t" x="1118.0" y="115.2" text-anchor="middle" font-size="12" font-weight="600" style="fill:#5d8dff;fill-opacity:0.92" letter-spacing="0.04em">v1.4.1</text><g><title>Windows</title><rect x="1160.9" y="99.0" width="24" height="24" rx="12.0" fill="#5d8dff" fill-opacity="0.16" stroke="#5d8dff" stroke-opacity="0.42" stroke-width="1"/><g fill="#5d8dff" fill-opacity="0.92"><rect x="1167.6" y="105.7" width="4.9" height="4.9" rx="0.8"/><rect x="1173.3" y="105.7" width="4.9" height="4.9" rx="0.8"/><rect x="1167.6" y="111.4" width="4.9" height="4.9" rx="0.8"/><rect x="1173.3" y="111.4" width="4.9" height="4.9" rx="0.8"/></g></g></g>
+    <g class="rise" style="animation-delay:0.92s"><rect x="1083.1" y="99.0" width="69.8" height="24" rx="12.0" fill="#7563ff" fill-opacity="0.16" stroke="#7563ff" stroke-opacity="0.42" stroke-width="1"/><text class="t" x="1118.0" y="115.2" text-anchor="middle" font-size="12" font-weight="600" style="fill:#7563ff;fill-opacity:0.92" letter-spacing="0.04em">v2.0.0</text><g><title>Windows</title><rect x="1160.9" y="99.0" width="24" height="24" rx="12.0" fill="#7563ff" fill-opacity="0.16" stroke="#7563ff" stroke-opacity="0.42" stroke-width="1"/><g fill="#7563ff" fill-opacity="0.92"><rect x="1167.6" y="105.7" width="4.9" height="4.9" rx="0.8"/><rect x="1173.3" y="105.7" width="4.9" height="4.9" rx="0.8"/><rect x="1167.6" y="111.4" width="4.9" height="4.9" rx="0.8"/><rect x="1173.3" y="111.4" width="4.9" height="4.9" rx="0.8"/></g></g></g>
   </g>
 </svg>

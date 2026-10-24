@@ -54,21 +54,21 @@
       "version": "2.2.0"
     },
     {
-      "slug": "frame-notes",
-      "name": "Frame Notes",
-      "repo": "frame-notes",
-      "exe": "FrameNotes.exe",
+      "slug": "retake",
+      "name": "Retake",
+      "repo": "retake",
+      "exe": "Retake.exe",
       "line": "Frame-accurate review notes for video editors",
-      "accent": "#5d8dff",
-      "hue": "#3a63d9",
+      "accent": "#7563ff",
+      "hue": "#5f6f8c",
       "bg": [
-        "#0a0b0e",
-        "#14161b",
-        "#1b1e25"
+        "#050607",
+        "#0d1014",
+        "#191d24"
       ],
-      "icon": "frame-notes.svg",
-      "icon_scale": 0.62,
-      "version": "1.4.1"
+      "icon": "retake.svg",
+      "icon_scale": 0.7,
+      "version": "2.0.0"
     },
     {
       "slug": "mic-control",
