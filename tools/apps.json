@@ -51,7 +51,7 @@
       ],
       "icon": "media-forge.svg",
       "icon_scale": 0.7,
-      "version": "2.3.0"
+      "version": "2.3.1"
     },
     {
       "slug": "retake",
@@ -68,7 +68,7 @@
       ],
       "icon": "retake.svg",
       "icon_scale": 0.7,
-      "version": "2.1.1"
+      "version": "2.2.0"
     },
     {
       "slug": "mic-control",
