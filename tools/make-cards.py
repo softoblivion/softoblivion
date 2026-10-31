@@ -9,6 +9,7 @@ blobs); every delay is written as an explicit `animation-delay`, so a renderer c
 instant; it all stops under prefers-reduced-motion.
 
 Usage:  py -3 tools/make-cards.py [--fetch] [--out assets]
+Reads apps.json (per app an optional "langs" list of glyph keys) and langs.json (label and path data per key).
   --fetch   read the latest release tag of every repository from the GitHub API and store it in apps.json
 Writes the assets (file names carry a content hash) and README.md. Stdlib only.
 """
@@ -22,10 +23,12 @@ import pathlib
 import re
 import sys
 import urllib.request
+import xml.etree.ElementTree as ET
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 FONT_FILE = HERE / "Sora-latin.woff2"
+LANGS_FILE = HERE / "langs.json"
 FONT = "Sora,'Segoe UI Variable Display','Segoe UI',Inter,Roboto,'Helvetica Neue',Arial,system-ui,sans-serif"
 
 THEMES = {
@@ -229,32 +232,75 @@ def meta_line(a: dict, cx: float, cy: float, light: bool) -> str:
             f'<g fill="{ink}" fill-opacity="0.92">{panes}</g></g>')
 
 
-def download_block(uid: str, a: dict, x_right: float, cy: float, t: dict, delay: float, light: bool) -> str:
+def load_langs() -> dict:
+    """The language glyphs (path data of a 128 x 128 box and a label per key) from tools/langs.json."""
+    return json.loads(LANGS_FILE.read_text(encoding="utf-8"))
+
+
+def lang_labels(a: dict, langs: dict) -> list[str]:
+    """Display labels of an app's languages, in the order of its `langs` list."""
+    return [langs[k]["label"] for k in a.get("langs", [])]
+
+
+LANG_SIZE, LANG_GAP, LANG_LINE_GAP = 18, 10, 10     # glyph size, gap between glyphs, gap above the glyph row
+
+
+def lang_line(a: dict, langs: dict, cx: float, cy: float, light: bool) -> str:
+    """The language glyphs of an app on one line centred at (cx, cy): one colour (the ink of the version chip),
+    no pill behind a glyph. Each glyph is a nested <svg> of the stored viewBox with a <title> label."""
+    size, gap = LANG_SIZE, LANG_GAP
+    keys = a.get("langs", [])
+    total = len(keys) * size + (len(keys) - 1) * gap
+    x0, y0 = cx - total / 2, cy - size / 2
+    ink = mix(a["accent"], "#0b1020", 0.45) if light else a["accent"]
+    parts = []
+    for i, k in enumerate(keys):
+        g = langs[k]
+        parts.append(f'<g><title>{esc(g["label"])}</title>'
+                     f'<svg x="{x0 + i * (size + gap):.1f}" y="{y0:.1f}" width="{size}" height="{size}" '
+                     f'viewBox="0 0 {g["viewBox"]} {g["viewBox"]}"><path d="{g["d"]}"/></svg></g>')
+    return f'<g fill="{ink}" fill-opacity="0.92">{"".join(parts)}</g>'
+
+
+def download_block(uid: str, a: dict, langs: dict, x_right: float, cy: float, t: dict, delay: float, light: bool) -> str:
     """The download part of a row, centred on `cy` as one group: an accent block with the download mark,
-    "Download" and the exe name, and under it the version chip and the platform glyph."""
+    "Download" and the exe name, under it the version chip and the platform glyph, and under that the glyphs of
+    the app's languages (when it lists any)."""
     bw, bh = 236, 62
     line_gap, line_h = 10, 24
-    top = cy - (bh + line_gap + line_h) / 2
+    lang_h = LANG_LINE_GAP + LANG_SIZE if a.get("langs") else 0
+    top = cy - (bh + line_gap + line_h + lang_h) / 2
     x, y = x_right - bw, top
     bcy = y + bh / 2
     mx = x + 24
     tx = x + 58
+    lang_group = ""
+    if lang_h:
+        lang_cy = y + bh + line_gap + line_h + LANG_LINE_GAP + LANG_SIZE / 2
+        lang_group = (f'\n    <g class="rise" style="animation-delay:{delay + 0.24:.2f}s">'
+                      f'{lang_line(a, langs, x + bw / 2, lang_cy, light)}</g>')
     return f'''<g class="rise" style="animation-delay:{delay:.2f}s">
       <rect x="{x:.0f}" y="{y:.0f}" width="{bw}" height="{bh}" rx="18" fill="url(#{uid}pill)" filter="url(#{uid}shadow)"/>
       <path d="M{mx + 8:.0f} {bcy - 10:.0f} v12 m-6 -5 l6 6 l6 -6 M{mx:.0f} {bcy + 9:.0f} h16" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
       <text class="t" x="{tx:.0f}" y="{bcy - 3:.0f}" font-size="18" font-weight="650" style="fill:#ffffff">Download</text>
       <text class="t" x="{tx:.0f}" y="{bcy + 17:.0f}" font-size="13" font-weight="600" style="fill:#ffffff;fill-opacity:0.85" letter-spacing="0.03em">{esc(a['exe'])}</text>
     </g>
-    <g class="rise" style="animation-delay:{delay + 0.12:.2f}s">{meta_line(a, x + bw / 2, y + bh + line_gap + line_h / 2, light)}</g>'''
+    <g class="rise" style="animation-delay:{delay + 0.12:.2f}s">{meta_line(a, x + bw / 2, y + bh + line_gap + line_h / 2, light)}</g>{lang_group}'''
 
 
-SPLIT = 1000                        # x where a row is cut: the left part links to the repository, the right part to the asset
+def download_label(a: dict, langs: dict) -> str:
+    """Accessible text of the download image: exe, version, platform and the languages."""
+    names = lang_labels(a, langs)
+    return f"Download {a['exe']} (v{a['version']}, Windows" + (f"; {', '.join(names)}" if names else "") + ")"
 
 
-def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 150) -> str:
+SPLIT = 1000                       # x where a row is cut: the left part links to the repository, the right part to the asset
+
+
+def row(a: dict, cfg: dict, langs: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 164) -> str:
     """One application row drawn once and cut into two images: `part` "repo" (icon, name, one line; the link
-    to the repository) and `part` "get" (the download block with the version chip and the platform glyph under
-    it; the link to the latest release asset). Both draw the same background (gradient, blobs, glass) in the
+    to the repository) and `part` "get" (the download block with the version chip, the platform glyph and the
+    language glyphs under it; the link to the latest release asset). Both draw the same background (gradient, blobs, glass) in the
     row's coordinates and show their slice through the viewBox, so the seam is invisible; each part contains
     only its own foreground elements."""
     t = THEMES[theme]
@@ -276,8 +322,8 @@ def row(a: dict, cfg: dict, theme: str, index: int, part: str, w: int = 1280, h:
     </g>'''
     else:
         vx, vw_ = SPLIT, w - SPLIT
-        label = f"Download {a['exe']} (v{a['version']}, Windows)"
-        front = download_block(uid, a, w - pad, h / 2, t, d + 0.24, light)
+        label = download_label(a, langs)
+        front = download_block(uid, a, langs, w - pad, h / 2, t, d + 0.24, light)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{vw_}" height="{h}" viewBox="{vx} 0 {vw_} {h}" role="img" aria-label="{esc(label)}">
   <title>{esc(label)}</title>
   <defs>{defs_common(t, uid, a['accent'], a['hue'], a['bg'], light)}{filters(uid, t, 48)}
@@ -309,7 +355,7 @@ def fetch_versions(cfg: dict) -> None:
         print(f"{a['repo']}: {tag}")
 
 
-def readme(cfg: dict, names: dict) -> str:
+def readme(cfg: dict, langs: dict, names: dict) -> str:
     """The README: the hero, then per app the repository image and the download image on one line."""
     def pic(key: str, alt: str, width: str) -> str:
         return (f'<picture><source media="(prefers-color-scheme: light)" srcset="assets/{names[key + "-light"]}">'
@@ -318,9 +364,20 @@ def readme(cfg: dict, names: dict) -> str:
     lines = ['<div align="center">', "", pic("hero", cfg["phrase"], "100%")]
     for a in cfg["apps"]:
         lines.append(f'<a href="https://github.com/{o}/{a["repo"]}">{pic("app-" + a["slug"], a["name"] + ": " + a["line"], "78.125%")}</a>'
-                     f'<a href="https://github.com/{o}/{a["repo"]}/releases/latest/download/{a["exe"]}">{pic("get-" + a["slug"], "Download " + a["exe"], "21.875%")}</a>')
+                     f'<a href="https://github.com/{o}/{a["repo"]}/releases/latest/download/{a["exe"]}">{pic("get-" + a["slug"], download_label(a, langs), "21.875%")}</a>')
     lines += ["", "</div>", ""]
     return "\n".join(lines)
+
+
+def check_config(cfg: dict, langs: dict) -> None:
+    """Fail early on a language key without a glyph and on a glyph without path data."""
+    for a in cfg["apps"]:
+        for k in a.get("langs", []):
+            if k.startswith("_") or not isinstance(langs.get(k), dict):
+                sys.exit(f"apps.json: app {a['slug']} lists language '{k}' which is missing in langs.json")
+    for k, g in langs.items():
+        if not k.startswith("_") and not (g.get("d") and g.get("label") and g.get("viewBox")):
+            sys.exit(f"langs.json: glyph '{k}' needs label, viewBox and d")
 
 
 def main() -> int:
@@ -330,6 +387,8 @@ def main() -> int:
     args = ap.parse_args()
     cfg_path = HERE / "apps.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    langs = load_langs()
+    check_config(cfg, langs)
     if args.fetch:
         fetch_versions(cfg)
         cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
@@ -345,6 +404,7 @@ def main() -> int:
         digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
         name = f"{key}.{digest}.svg"
         path = out / name
+        ET.fromstring(text)                      # every asset must be well-formed XML
         path.write_text(text, encoding="utf-8", newline="\n")
         names[key] = name
         print(f"wrote {name} ({path.stat().st_size // 1024} KB)")
@@ -352,9 +412,9 @@ def main() -> int:
     for theme in ("dark", "light"):
         write(f"hero-{theme}", hero_band(cfg, theme))
         for i, a in enumerate(cfg["apps"]):
-            write(f"app-{a['slug']}-{theme}", row(a, cfg, theme, i, "repo"))
-            write(f"get-{a['slug']}-{theme}", row(a, cfg, theme, i, "get"))
-    (ROOT / "README.md").write_text(readme(cfg, names), encoding="utf-8", newline="\n")
+            write(f"app-{a['slug']}-{theme}", row(a, cfg, langs, theme, i, "repo"))
+            write(f"get-{a['slug']}-{theme}", row(a, cfg, langs, theme, i, "get"))
+    (ROOT / "README.md").write_text(readme(cfg, langs, names), encoding="utf-8", newline="\n")
     print("wrote README.md")
     return 0
 
