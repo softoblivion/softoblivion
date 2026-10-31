@@ -17,7 +17,7 @@
       ],
       "icon": "premiere-deck.svg",
       "icon_scale": 0.6,
-      "version": "3.1.0"
+      "version": "3.2.0"
     },
     {
       "slug": "media-saver",
@@ -34,7 +34,7 @@
       ],
       "icon": "media-saver.svg",
       "icon_scale": 0.72,
-      "version": "3.3.0"
+      "version": "3.3.1"
     },
     {
       "slug": "media-forge",
@@ -51,7 +51,7 @@
       ],
       "icon": "media-forge.svg",
       "icon_scale": 0.7,
-      "version": "2.3.1"
+      "version": "2.3.2"
     },
     {
       "slug": "retake",
@@ -68,7 +68,7 @@
       ],
       "icon": "retake.svg",
       "icon_scale": 0.7,
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "slug": "mic-control",
