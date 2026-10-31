@@ -9,7 +9,8 @@ blobs); every delay is written as an explicit `animation-delay`, so a renderer c
 instant; it all stops under prefers-reduced-motion.
 
 Usage:  py -3 tools/make-cards.py [--fetch] [--out assets]
-Reads apps.json (per app an optional "langs" list of glyph keys) and langs.json (label and path data per key).
+Reads apps.json (per app an optional "stack" list of keys: the languages and key tools the app is built with)
+and stack.json (label, source and path data per key).
   --fetch   read the latest release tag of every repository from the GitHub API and store it in apps.json
 Writes the assets (file names carry a content hash) and README.md. Stdlib only.
 """
@@ -28,7 +29,7 @@ import xml.etree.ElementTree as ET
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent
 FONT_FILE = HERE / "Sora-latin.woff2"
-LANGS_FILE = HERE / "langs.json"
+STACK_FILE = HERE / "stack.json"
 FONT = "Sora,'Segoe UI Variable Display','Segoe UI',Inter,Roboto,'Helvetica Neue',Arial,system-ui,sans-serif"
 
 THEMES = {
@@ -89,6 +90,20 @@ def text_w(s: str, size: float, weight: int = 600) -> float:
     """Rough width of a Sora string; pills and chips are sized by it, typed lines force it with textLength."""
     k = 0.58 + (weight - 400) / 2400
     return len(s) * size * k
+
+
+# Advance widths of Sora 600 for the characters 32..126, in thousandths of an em (measured from the embedded
+# font); the stack chips are sized by them, so a label sits in its pill with exact padding.
+SORA_600 = [216, 310, 473, 712, 651, 877, 717, 266, 387, 387, 569, 594, 269, 507, 269, 386, 756, 425, 627, 626,
+            662, 637, 678, 596, 657, 678, 269, 269, 594, 590, 594, 559, 1126, 773, 688, 799, 785, 596, 560, 832,
+            801, 326, 642, 728, 553, 954, 867, 865, 658, 865, 720, 674, 610, 780, 729, 1062, 713, 655, 650, 387,
+            386, 387, 602, 585, 300, 588, 699, 610, 699, 620, 381, 683, 648, 325, 332, 617, 305, 978, 648, 679,
+            699, 699, 417, 549, 431, 639, 584, 897, 587, 562, 497, 387, 387, 387, 527]
+
+
+def sora_w(s: str, size: float) -> float:
+    """Width of a Sora 600 string at `size`; a character outside the table counts as 0.62 em."""
+    return sum(SORA_600[ord(c) - 32] if 32 <= ord(c) <= 126 else 620 for c in s) * size / 1000
 
 
 # ----------------------------------------------------------------------------------------------- building blocks
@@ -232,77 +247,105 @@ def meta_line(a: dict, cx: float, cy: float, light: bool) -> str:
             f'<g fill="{ink}" fill-opacity="0.92">{panes}</g></g>')
 
 
-def load_langs() -> dict:
-    """The language glyphs (path data of a 128 x 128 box and a label per key) from tools/langs.json."""
-    return json.loads(LANGS_FILE.read_text(encoding="utf-8"))
+def load_stack() -> dict:
+    """The stack glyphs (label, source, path data of a square viewBox, optional fill rule per key) from
+    tools/stack.json."""
+    return json.loads(STACK_FILE.read_text(encoding="utf-8"))
 
 
-def lang_labels(a: dict, langs: dict) -> list[str]:
-    """Display labels of an app's languages, in the order of its `langs` list."""
-    return [langs[k]["label"] for k in a.get("langs", [])]
+def stack_labels(a: dict, stack: dict) -> list[str]:
+    """Display labels of an app's stack, in the order of its `stack` list."""
+    return [stack[k]["label"] for k in a.get("stack", [])]
 
 
-LANG_SIZE, LANG_GAP, LANG_LINE_GAP = 18, 10, 10     # glyph size, gap between glyphs, gap above the glyph row
+def glyph(g: dict, x: float, y: float, size: float) -> str:
+    """One stack glyph as a nested <svg> of its stored viewBox; the fill comes from the enclosing group."""
+    rule = f' fill-rule="{g["rule"]}"' if g.get("rule") else ""
+    return (f'<svg x="{x:.1f}" y="{y:.1f}" width="{size}" height="{size}" viewBox="0 0 {g["viewBox"]} {g["viewBox"]}">'
+            f'<path d="{g["d"]}"{rule}/></svg>')
 
 
-def lang_line(a: dict, langs: dict, cx: float, cy: float, light: bool) -> str:
-    """The language glyphs of an app on one line centred at (cx, cy): one colour (the ink of the version chip),
-    no pill behind a glyph. Each glyph is a nested <svg> of the stored viewBox with a <title> label."""
-    size, gap = LANG_SIZE, LANG_GAP
-    keys = a.get("langs", [])
-    total = len(keys) * size + (len(keys) - 1) * gap
-    x0, y0 = cx - total / 2, cy - size / 2
+# Stack chips under the tagline: pill height, glyph size, label size, inner paddings, gap between chips.
+CHIP_H, CHIP_G, CHIP_T, CHIP_PL, CHIP_GT, CHIP_PR, CHIP_GAP = 36, 22, 16, 10, 8, 15, 10
+# Below NARROW px of rendered image width the chips give way to a row of larger glyphs without labels.
+NARROW, NARROW_G, NARROW_GAP = 520, 44, 18
+
+
+def stack_chips(a: dict, stack: dict, x: float, top: float, t: dict, delay: float, light: bool) -> str:
+    """The app's stack under its tagline, starting at (x, top): one quiet glass pill per item with the glyph in
+    the app's accent and the label in the secondary ink. Under a narrow rendering (the media query of the SVG
+    image's own width) the pills are swapped for larger glyphs alone, so the marks stay legible on a phone."""
     ink = mix(a["accent"], "#0b1020", 0.45) if light else a["accent"]
-    parts = []
-    for i, k in enumerate(keys):
-        g = langs[k]
-        parts.append(f'<g><title>{esc(g["label"])}</title>'
-                     f'<svg x="{x0 + i * (size + gap):.1f}" y="{y0:.1f}" width="{size}" height="{size}" '
-                     f'viewBox="0 0 {g["viewBox"]} {g["viewBox"]}"><path d="{g["d"]}"/></svg></g>')
-    return f'<g fill="{ink}" fill-opacity="0.92">{"".join(parts)}</g>'
+    base = "#0b1020" if light else "#ffffff"
+    fill_op, rim_op = (0.045, 0.13) if light else (0.07, 0.16)
+    cy = top + CHIP_H / 2
+    wide, narrow = [], []
+    cx, nx = x, x
+    for i, k in enumerate(a.get("stack", [])):
+        g = stack[k]
+        lw = sora_w(g["label"], CHIP_T)
+        w = CHIP_PL + CHIP_G + CHIP_GT + lw + CHIP_PR
+        d = f"{delay + i * 0.05:.2f}"
+        wide.append(
+            f'<g class="rise" style="animation-delay:{d}s"><title>{esc(g["label"])}</title>'
+            f'<rect x="{cx:.1f}" y="{top:.1f}" width="{w:.1f}" height="{CHIP_H}" rx="{CHIP_H / 2}" fill="{base}" '
+            f'fill-opacity="{fill_op}" stroke="{base}" stroke-opacity="{rim_op}" stroke-width="1"/>'
+            f'<g fill="{ink}">{glyph(g, cx + CHIP_PL, cy - CHIP_G / 2, CHIP_G)}</g>'
+            f'<text class="t" x="{cx + CHIP_PL + CHIP_G + CHIP_GT:.1f}" y="{cy + CHIP_T * 0.35:.1f}" font-size="{CHIP_T}" '
+            f'font-weight="600" style="fill-opacity:{t["ink2_op"]}">{esc(g["label"])}</text></g>')
+        narrow.append(
+            f'<g class="rise" style="animation-delay:{d}s"><title>{esc(g["label"])}</title>'
+            f'<g fill="{ink}">{glyph(g, nx, cy - NARROW_G / 2, NARROW_G)}</g></g>')
+        cx += w + CHIP_GAP
+        nx += NARROW_G + NARROW_GAP
+    return f'<g class="wide">{"".join(wide)}</g><g class="narrow">{"".join(narrow)}</g>'
 
 
-def download_block(uid: str, a: dict, langs: dict, x_right: float, cy: float, t: dict, delay: float, light: bool) -> str:
+def narrow_css() -> str:
+    return f".narrow{{display:none}}@media (max-width:{NARROW}px){{.wide{{display:none}}.narrow{{display:inline}}}}"
+
+
+def download_block(uid: str, a: dict, x_right: float, cy: float, t: dict, delay: float, light: bool) -> str:
     """The download part of a row, centred on `cy` as one group: an accent block with the download mark,
-    "Download" and the exe name, under it the version chip and the platform glyph, and under that the glyphs of
-    the app's languages (when it lists any)."""
+    "Download" and the exe name, and under it the version chip and the platform glyph."""
     bw, bh = 236, 62
     line_gap, line_h = 10, 24
-    lang_h = LANG_LINE_GAP + LANG_SIZE if a.get("langs") else 0
-    top = cy - (bh + line_gap + line_h + lang_h) / 2
+    top = cy - (bh + line_gap + line_h) / 2
     x, y = x_right - bw, top
     bcy = y + bh / 2
     mx = x + 24
     tx = x + 58
-    lang_group = ""
-    if lang_h:
-        lang_cy = y + bh + line_gap + line_h + LANG_LINE_GAP + LANG_SIZE / 2
-        lang_group = (f'\n    <g class="rise" style="animation-delay:{delay + 0.24:.2f}s">'
-                      f'{lang_line(a, langs, x + bw / 2, lang_cy, light)}</g>')
     return f'''<g class="rise" style="animation-delay:{delay:.2f}s">
       <rect x="{x:.0f}" y="{y:.0f}" width="{bw}" height="{bh}" rx="18" fill="url(#{uid}pill)" filter="url(#{uid}shadow)"/>
       <path d="M{mx + 8:.0f} {bcy - 10:.0f} v12 m-6 -5 l6 6 l6 -6 M{mx:.0f} {bcy + 9:.0f} h16" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
       <text class="t" x="{tx:.0f}" y="{bcy - 3:.0f}" font-size="18" font-weight="650" style="fill:#ffffff">Download</text>
       <text class="t" x="{tx:.0f}" y="{bcy + 17:.0f}" font-size="13" font-weight="600" style="fill:#ffffff;fill-opacity:0.85" letter-spacing="0.03em">{esc(a['exe'])}</text>
     </g>
-    <g class="rise" style="animation-delay:{delay + 0.12:.2f}s">{meta_line(a, x + bw / 2, y + bh + line_gap + line_h / 2, light)}</g>{lang_group}'''
+    <g class="rise" style="animation-delay:{delay + 0.12:.2f}s">{meta_line(a, x + bw / 2, y + bh + line_gap + line_h / 2, light)}</g>'''
 
 
-def download_label(a: dict, langs: dict) -> str:
-    """Accessible text of the download image: exe, version, platform and the languages."""
-    names = lang_labels(a, langs)
-    return f"Download {a['exe']} (v{a['version']}, Windows" + (f"; {', '.join(names)}" if names else "") + ")"
+def app_label(a: dict, stack: dict) -> str:
+    """Accessible text of the repository image: name, tagline and the stack."""
+    names = stack_labels(a, stack)
+    return f"{a['name']}: {a['line']}" + (f" ({', '.join(names)})" if names else "")
+
+
+def download_label(a: dict) -> str:
+    """Accessible text of the download image: exe, version and platform."""
+    return f"Download {a['exe']} (v{a['version']}, Windows)"
 
 
 SPLIT = 1000                       # x where a row is cut: the left part links to the repository, the right part to the asset
+NAME_CAP = 24                      # cap height of the 34 px name (Sora): the text block is centred from the cap line
+CHIP_DY = 18                       # tagline baseline to the top of the stack chips
 
 
-def row(a: dict, cfg: dict, langs: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 164) -> str:
-    """One application row drawn once and cut into two images: `part` "repo" (icon, name, one line; the link
-    to the repository) and `part` "get" (the download block with the version chip, the platform glyph and the
-    language glyphs under it; the link to the latest release asset). Both draw the same background (gradient, blobs, glass) in the
-    row's coordinates and show their slice through the viewBox, so the seam is invisible; each part contains
-    only its own foreground elements."""
+def row(a: dict, cfg: dict, stack: dict, theme: str, index: int, part: str, w: int = 1280, h: int = 176) -> str:
+    """One application row drawn once and cut into two images: `part` "repo" (icon, name, one line and the
+    stack chips under it; the link to the repository) and `part` "get" (the download block with the version
+    chip and the platform glyph under it; the link to the latest release asset). Both draw the same background
+    (gradient, blobs, glass) in the row's coordinates and show their slice through the viewBox, so the seam is
+    invisible; each part contains only its own foreground elements."""
     t = THEMES[theme]
     light = theme == "light"
     uid = "r-"
@@ -310,26 +353,34 @@ def row(a: dict, cfg: dict, langs: dict, theme: str, index: int, part: str, w: i
     pad = 28
     ty = (h - tsize) / 2
     tx = pad + tsize + 30
-    ny = h / 2 - 4
     d = 0.2 + index * 0.12
+    css = ""
     if part == "repo":
         vx, vw_ = 0, SPLIT
-        label = f"{a['name']}: {a['line']}"
+        label = app_label(a, stack)
+        chips = ""
+        if a.get("stack"):
+            block = NAME_CAP + 36 + CHIP_DY + CHIP_H    # cap line to chip bottom: name, tagline, gap, chips
+            ny = (h - block) / 2 + NAME_CAP
+            chips = "\n    " + stack_chips(a, stack, tx, ny + 36 + CHIP_DY, t, d + 0.24, light)
+            css = narrow_css()
+        else:
+            ny = h / 2 - 4
         front = f'''<g class="rise" style="animation-delay:{d:.2f}s">{tile(uid, pad, ty, tsize, 24, icon_of(a, "ic-", pad, ty, tsize))}</g>
     <g class="rise" style="animation-delay:{d + 0.12:.2f}s">
       <text class="t" x="{tx}" y="{ny:.0f}" font-size="34" font-weight="700" letter-spacing="-0.02em">{esc(a['name'])}</text>
       <text class="t" x="{tx}" y="{ny + 36:.0f}" font-size="19" font-weight="450" fill-opacity="{t['ink2_op']}">{esc(a['line'])}</text>
-    </g>'''
+    </g>{chips}'''
     else:
         vx, vw_ = SPLIT, w - SPLIT
-        label = download_label(a, langs)
-        front = download_block(uid, a, langs, w - pad, h / 2, t, d + 0.24, light)
+        label = download_label(a)
+        front = download_block(uid, a, w - pad, h / 2, t, d + 0.24, light)
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="{vw_}" height="{h}" viewBox="{vx} 0 {vw_} {h}" role="img" aria-label="{esc(label)}">
   <title>{esc(label)}</title>
   <defs>{defs_common(t, uid, a['accent'], a['hue'], a['bg'], light)}{filters(uid, t, 48)}
     <clipPath id="{uid}frame"><rect width="{w}" height="{h}" rx="26"/></clipPath>
   </defs>
-  {style_common(t)}
+  {style_common(t, css)}
   <g clip-path="url(#{uid}frame)">
     <rect width="{w}" height="{h}" fill="url(#{uid}bg)"/>
     <g filter="url(#{uid}blur)">
@@ -355,7 +406,7 @@ def fetch_versions(cfg: dict) -> None:
         print(f"{a['repo']}: {tag}")
 
 
-def readme(cfg: dict, langs: dict, names: dict) -> str:
+def readme(cfg: dict, stack: dict, names: dict) -> str:
     """The README: the hero, then per app the repository image and the download image on one line."""
     def pic(key: str, alt: str, width: str) -> str:
         return (f'<picture><source media="(prefers-color-scheme: light)" srcset="assets/{names[key + "-light"]}">'
@@ -363,21 +414,29 @@ def readme(cfg: dict, langs: dict, names: dict) -> str:
     o = cfg["owner"]
     lines = ['<div align="center">', "", pic("hero", cfg["phrase"], "100%")]
     for a in cfg["apps"]:
-        lines.append(f'<a href="https://github.com/{o}/{a["repo"]}">{pic("app-" + a["slug"], a["name"] + ": " + a["line"], "78.125%")}</a>'
-                     f'<a href="https://github.com/{o}/{a["repo"]}/releases/latest/download/{a["exe"]}">{pic("get-" + a["slug"], download_label(a, langs), "21.875%")}</a>')
+        lines.append(f'<a href="https://github.com/{o}/{a["repo"]}">{pic("app-" + a["slug"], app_label(a, stack), "78.125%")}</a>'
+                     f'<a href="https://github.com/{o}/{a["repo"]}/releases/latest/download/{a["exe"]}">{pic("get-" + a["slug"], download_label(a), "21.875%")}</a>')
     lines += ["", "</div>", ""]
     return "\n".join(lines)
 
 
-def check_config(cfg: dict, langs: dict) -> None:
-    """Fail early on a language key without a glyph and on a glyph without path data."""
+def check_config(cfg: dict, stack: dict) -> None:
+    """Fail early (before any asset is removed) on a stack key without a glyph, on a glyph without path data and
+    on a glyph whose source has no entry in `_sources`."""
+    sources = stack.get("_sources", {})
     for a in cfg["apps"]:
-        for k in a.get("langs", []):
-            if k.startswith("_") or not isinstance(langs.get(k), dict):
-                sys.exit(f"apps.json: app {a['slug']} lists language '{k}' which is missing in langs.json")
-    for k, g in langs.items():
-        if not k.startswith("_") and not (g.get("d") and g.get("label") and g.get("viewBox")):
-            sys.exit(f"langs.json: glyph '{k}' needs label, viewBox and d")
+        for k in a.get("stack", []):
+            if k.startswith("_") or not isinstance(stack.get(k), dict):
+                sys.exit(f"apps.json: app {a['slug']} lists stack item '{k}' which is missing in stack.json")
+    for k, g in stack.items():
+        if k.startswith("_"):
+            continue
+        if not (g.get("d") and g.get("label") and g.get("viewBox")):
+            sys.exit(f"stack.json: glyph '{k}' needs label, viewBox and d")
+        if g.get("source") not in sources:
+            sys.exit(f"stack.json: glyph '{k}' names source '{g.get('source')}' which is missing in _sources")
+        if g.get("rule", "nonzero") not in ("nonzero", "evenodd"):
+            sys.exit(f"stack.json: glyph '{k}' has fill rule '{g['rule']}' (nonzero or evenodd)")
 
 
 def main() -> int:
@@ -387,8 +446,8 @@ def main() -> int:
     args = ap.parse_args()
     cfg_path = HERE / "apps.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    langs = load_langs()
-    check_config(cfg, langs)
+    stack = load_stack()
+    check_config(cfg, stack)
     if args.fetch:
         fetch_versions(cfg)
         cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
@@ -412,9 +471,9 @@ def main() -> int:
     for theme in ("dark", "light"):
         write(f"hero-{theme}", hero_band(cfg, theme))
         for i, a in enumerate(cfg["apps"]):
-            write(f"app-{a['slug']}-{theme}", row(a, cfg, langs, theme, i, "repo"))
-            write(f"get-{a['slug']}-{theme}", row(a, cfg, langs, theme, i, "get"))
-    (ROOT / "README.md").write_text(readme(cfg, langs, names), encoding="utf-8", newline="\n")
+            write(f"app-{a['slug']}-{theme}", row(a, cfg, stack, theme, i, "repo"))
+            write(f"get-{a['slug']}-{theme}", row(a, cfg, stack, theme, i, "get"))
+    (ROOT / "README.md").write_text(readme(cfg, stack, names), encoding="utf-8", newline="\n")
     print("wrote README.md")
     return 0
 

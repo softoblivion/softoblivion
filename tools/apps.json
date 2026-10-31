@@ -17,7 +17,7 @@
       ],
       "icon": "premiere-deck.svg",
       "icon_scale": 0.6,
-      "langs": [
+      "stack": [
         "python",
         "javascript"
       ],
@@ -38,9 +38,10 @@
       ],
       "icon": "media-saver.svg",
       "icon_scale": 0.72,
-      "langs": [
+      "stack": [
         "python",
-        "javascript"
+        "javascript",
+        "ffmpeg"
       ],
       "version": "3.3.1"
     },
@@ -59,9 +60,11 @@
       ],
       "icon": "media-forge.svg",
       "icon_scale": 0.7,
-      "langs": [
+      "stack": [
         "python",
-        "javascript"
+        "javascript",
+        "ffmpeg",
+        "opencv"
       ],
       "version": "2.3.2"
     },
@@ -80,8 +83,10 @@
       ],
       "icon": "retake.svg",
       "icon_scale": 0.7,
-      "langs": [
-        "csharp"
+      "stack": [
+        "csharp",
+        "dotnet",
+        "mpv"
       ],
       "version": "2.3.0"
     },
@@ -100,8 +105,9 @@
       ],
       "icon": "mic-control.png",
       "icon_scale": 0.7,
-      "langs": [
-        "csharp"
+      "stack": [
+        "csharp",
+        "dotnet"
       ],
       "version": "2.4.0"
     }
