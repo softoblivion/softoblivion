@@ -21,7 +21,7 @@
         "python",
         "javascript"
       ],
-      "version": "3.1.0"
+      "version": "3.2.0"
     },
     {
       "slug": "media-saver",
@@ -42,7 +42,7 @@
         "python",
         "javascript"
       ],
-      "version": "3.3.0"
+      "version": "3.3.1"
     },
     {
       "slug": "media-forge",
@@ -63,7 +63,7 @@
         "python",
         "javascript"
       ],
-      "version": "2.3.1"
+      "version": "2.3.2"
     },
     {
       "slug": "retake",
@@ -83,7 +83,7 @@
       "langs": [
         "csharp"
       ],
-      "version": "2.2.0"
+      "version": "2.3.0"
     },
     {
       "slug": "mic-control",
