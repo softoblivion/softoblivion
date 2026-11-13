@@ -88,14 +88,14 @@
         "dotnet",
         "mpv"
       ],
-      "version": "2.3.0"
+      "version": "2.4.0"
     },
     {
       "slug": "mic-control",
       "name": "Mic Control",
       "repo": "cute-mic-control",
       "exe": "MicControl.exe",
-      "line": "A hotkey that mutes the microphone, a heart that shows it",
+      "line": "Mic and speakers in the tray: mute hotkey, held levels, default devices",
       "accent": "#3ee6b8",
       "hue": "#d2409a",
       "bg": [
@@ -109,7 +109,7 @@
         "csharp",
         "dotnet"
       ],
-      "version": "2.4.0"
+      "version": "2.5.0"
     }
   ]
 }
