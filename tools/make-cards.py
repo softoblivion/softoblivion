@@ -8,11 +8,16 @@ SVG needs no external resource. Animation is CSS inside the SVG (a soft rise and
 blobs); every delay is written as an explicit `animation-delay`, so a renderer can shift the clock to any
 instant; it all stops under prefers-reduced-motion.
 
-Usage:  py -3 tools/make-cards.py [--fetch] [--out assets]
+Usage:  py -3 tools/make-cards.py [--fetch] [--out assets] | --selftest
 Reads apps.json (per app an optional "stack" list of keys: the languages and key tools the app is built with)
 and stack.json (label, source and path data per key).
-  --fetch   read the latest release tag of every repository from the GitHub API and store it in apps.json
-Writes the assets (file names carry a content hash) and README.md. Stdlib only.
+  --fetch     read the latest release tag of every repository from the GitHub API and store it in apps.json;
+              the environment variable GITHUB_TOKEN, when set, authenticates the requests; an app whose
+              repository has no release (404) keeps its stored version
+  --out DIR   the assets folder; README.md is written beside it (in DIR's parent) and links to DIR by its name
+  --selftest  run the offline checks of the generator and exit
+Writes the assets (file names carry a content hash) and README.md, then removes the assets of earlier runs
+that are no longer part of the set. Stdlib only.
 """
 from __future__ import annotations
 
@@ -20,9 +25,12 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import pathlib
 import re
 import sys
+import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -48,6 +56,8 @@ THEMES = {
 }
 BRAND_ACCENT, BRAND_HUE = "#7a8cff", "#ff7a59"
 BRAND_BG = ["#03050c", "#070c1c", "#0d1430"]
+# File names this generator writes: <key>.<8 hex digits>.svg (hero-<theme>, app-<slug>-<theme>, get-<slug>-<theme>).
+GENERATED = re.compile(r"^(?:hero|(?:app|get)-[A-Za-z0-9_-]+)-(?:dark|light)\.[0-9a-f]{8}\.svg$")
 
 
 def esc(t: str) -> str:
@@ -396,21 +406,41 @@ def row(a: dict, cfg: dict, stack: dict, theme: str, index: int, part: str, w: i
 
 # ----------------------------------------------------------------------------------------------- main
 
-def fetch_versions(cfg: dict) -> None:
+def fetch_versions(cfg: dict, opener=urllib.request.urlopen, token: str | None = None) -> None:
+    """Store the latest release tag of every app's repository in `cfg`. `token` (the caller reads GITHUB_TOKEN)
+    is sent as a bearer token and never printed. A 404 (no release yet) keeps that app's stored version and
+    warns; any other HTTP error propagates and fails the run. `opener` is injectable for tests."""
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "profile-cards"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     for a in cfg["apps"]:
         url = f"https://api.github.com/repos/{cfg['owner']}/{a['repo']}/releases/latest"
-        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "profile-cards"})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            tag = json.load(r)["tag_name"]
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with opener(req, timeout=30) as r:
+                tag = json.load(r)["tag_name"]
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+            print(f"warning: {a['repo']} has no latest release (404); keeping version {a['version']}", file=sys.stderr)
+            continue
         a["version"] = tag.lstrip("v")
         print(f"{a['repo']}: {tag}")
 
 
-def readme(cfg: dict, stack: dict, names: dict) -> str:
-    """The README: the hero, then per app the repository image and the download image on one line."""
+def save_config(path: pathlib.Path, cfg: dict) -> None:
+    """apps.json with LF line endings on every platform."""
+    path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+def readme(cfg: dict, stack: dict, names: dict, folder: str = "assets") -> str:
+    """The README: the hero, then per app the repository image and the download image on one line. The images
+    are linked as `<folder>/<name>`."""
+    base = urllib.parse.quote(folder)
+
     def pic(key: str, alt: str, width: str) -> str:
-        return (f'<picture><source media="(prefers-color-scheme: light)" srcset="assets/{names[key + "-light"]}">'
-                f'<img src="assets/{names[key + "-dark"]}" alt="{esc(alt)}" width="{width}"></picture>')
+        return (f'<picture><source media="(prefers-color-scheme: light)" srcset="{base}/{names[key + "-light"]}">'
+                f'<img src="{base}/{names[key + "-dark"]}" alt="{esc(alt)}" width="{width}"></picture>')
     o = cfg["owner"]
     lines = ['<div align="center">', "", pic("hero", cfg["phrase"], "100%")]
     for a in cfg["apps"]:
@@ -439,24 +469,13 @@ def check_config(cfg: dict, stack: dict) -> None:
             sys.exit(f"stack.json: glyph '{k}' has fill rule '{g['rule']}' (nonzero or evenodd)")
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--fetch", action="store_true")
-    ap.add_argument("--out", default=str(ROOT / "assets"))
-    args = ap.parse_args()
-    cfg_path = HERE / "apps.json"
-    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    stack = load_stack()
-    check_config(cfg, stack)
-    if args.fetch:
-        fetch_versions(cfg)
-        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
-    out = pathlib.Path(args.out)
+def build(cfg: dict, stack: dict, out: pathlib.Path) -> dict:
+    """Write the assets into `out` and README.md beside it (linking to `out` by name), then remove the assets of
+    earlier runs that are no longer part of the set. Everything new is written before anything old is removed,
+    so a failure part way leaves the previous assets and README intact and consistent."""
     out.mkdir(parents=True, exist_ok=True)
     # Every file name carries a hash of its content: GitHub's image proxy keeps serving an SVG at an unchanged
-    # URL, so a changed asset must change its name. Stale files are removed first.
-    for old in out.glob("*.svg"):
-        old.unlink()
+    # URL, so a changed asset must change its name.
     names: dict = {}
 
     def write(key: str, text: str) -> None:
@@ -473,8 +492,167 @@ def main() -> int:
         for i, a in enumerate(cfg["apps"]):
             write(f"app-{a['slug']}-{theme}", row(a, cfg, stack, theme, i, "repo"))
             write(f"get-{a['slug']}-{theme}", row(a, cfg, stack, theme, i, "get"))
-    (ROOT / "README.md").write_text(readme(cfg, stack, names), encoding="utf-8", newline="\n")
+    (out.parent / "README.md").write_text(readme(cfg, stack, names, out.name), encoding="utf-8", newline="\n")
     print("wrote README.md")
+    # The only deletion in this script: files of this generator's own earlier runs, recognised by its naming
+    # scheme (<key>.<8 hex digits>.svg), and only after the README points at the new set. Anything else in the
+    # folder stays.
+    keep = set(names.values())
+    for old in out.glob("*.svg"):
+        if old.name not in keep and GENERATED.match(old.name):
+            old.unlink()
+            print(f"removed {old.name}")
+    return names
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--fetch", action="store_true")
+    ap.add_argument("--out", default=str(ROOT / "assets"))
+    ap.add_argument("--selftest", action="store_true")
+    args = ap.parse_args()
+    if args.selftest:
+        return selftest()
+    cfg_path = HERE / "apps.json"
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    stack = load_stack()
+    check_config(cfg, stack)
+    if args.fetch:
+        fetch_versions(cfg, token=os.environ.get("GITHUB_TOKEN") or None)
+        save_config(cfg_path, cfg)
+    out = pathlib.Path(args.out).resolve()
+    if not out.name:
+        sys.exit("--out must be a folder with a name, not a drive root")
+    build(cfg, stack, out)
+    return 0
+
+
+# ----------------------------------------------------------------------------------------------- self-test
+
+def selftest() -> int:
+    """Offline checks: token header, 404 and other HTTP errors, LF endings, write-then-prune order and the README
+    location. Uses the real apps.json and stack.json, a temporary folder and no network."""
+    import contextlib
+    import copy
+    import io
+    import tempfile
+
+    class Resp:
+        def __init__(self, body: bytes):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, *a):
+            return self.body
+
+    def http_error(code: int) -> urllib.error.HTTPError:
+        return urllib.error.HTTPError("https://api.github.com/x", code, "x", {}, None)
+
+    def small_cfg() -> dict:
+        return {"owner": "o", "apps": [{"repo": "one", "version": "1.0.0"}, {"repo": "two", "version": "2.0.0"}]}
+
+    quiet = contextlib.redirect_stderr(io.StringIO())
+
+    # token header: present only with a token
+    seen: list = []
+
+    def ok_opener(req, timeout=None):
+        seen.append(req)
+        return Resp(b'{"tag_name": "v9.9.9"}')
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        fetch_versions(small_cfg(), opener=ok_opener)
+        fetch_versions(small_cfg(), opener=ok_opener, token="secret-token")
+    assert len(seen) == 4
+    assert all(r.get_header("Authorization") is None for r in seen[:2]), "anonymous run sent an Authorization header"
+    assert all(r.get_header("Authorization") == "Bearer secret-token" for r in seen[2:]), "token header missing"
+
+    # 404 keeps the stored version of that app only; the others refresh and nothing is printed of the token
+    def opener_404(req, timeout=None):
+        if req.full_url.endswith("/one/releases/latest"):
+            raise http_error(404)
+        return Resp(b'{"tag_name": "v3.1.4"}')
+
+    cfg = small_cfg()
+    out_buf, err_buf = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+        fetch_versions(cfg, opener=opener_404, token="secret-token")
+    assert cfg["apps"][0]["version"] == "1.0.0" and cfg["apps"][1]["version"] == "3.1.4", cfg
+    assert "warning" in err_buf.getvalue() and "one" in err_buf.getvalue()
+    assert "secret-token" not in out_buf.getvalue() + err_buf.getvalue(), "token was printed"
+
+    # any other HTTP error still fails the run
+    for code in (403, 500):
+        def opener_err(req, timeout=None, code=code):
+            raise http_error(code)
+        try:
+            with quiet, contextlib.redirect_stdout(io.StringIO()):
+                fetch_versions(small_cfg(), opener=opener_err)
+        except urllib.error.HTTPError as e:
+            assert e.code == code
+        else:
+            raise AssertionError(f"HTTP {code} did not fail the run")
+
+    with tempfile.TemporaryDirectory(prefix="cards-selftest-") as tmp:
+        tmp_path = pathlib.Path(tmp)
+
+        # apps.json is written with LF only
+        p = tmp_path / "apps.json"
+        save_config(p, {"owner": "o", "apps": [{"repo": "x", "version": "1.0.0"}]})
+        raw = p.read_bytes()
+        assert b"\r" not in raw and raw.endswith(b"\n"), "apps.json has CR"
+
+        real_cfg = json.loads((HERE / "apps.json").read_text(encoding="utf-8"))
+        stack = load_stack()
+        check_config(real_cfg, stack)
+
+        # README location and links follow --out; unrelated files survive the prune; generated ones from an
+        # earlier run that are not in the new set go, after the new ones exist
+        site = tmp_path / "site"
+        out = site / "pics"
+        out.mkdir(parents=True)
+        stale = out / "app-gone-dark.deadbeef.svg"
+        keepme = out / "notes.svg"
+        stale.write_text("<svg/>", encoding="utf-8")
+        keepme.write_text("<svg/>", encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            names = build(real_cfg, stack, out)
+        text = (site / "README.md").read_bytes().decode("utf-8")
+        assert b"\r" not in (site / "README.md").read_bytes(), "README has CR"
+        assert not (out / "README.md").exists() and not stale.exists() and keepme.exists()
+        linked = re.findall(r'(?:src|srcset)="([^"]+)"', text)
+        assert linked and all(l.startswith("pics/") and (site / l).is_file() for l in linked), "README links a missing file"
+        assert {f.name for f in out.glob("*.svg")} == set(names.values()) | {"notes.svg"}
+        assert all(b"\r" not in f.read_bytes() for f in out.glob("*.svg")), "asset has CR"
+
+        # a failure part way leaves the old assets and the old README as they were
+        before = {f.name for f in out.glob("*.svg")}
+        readme_before = (site / "README.md").read_bytes()
+        older = out / "hero-dark.00000000.svg"
+        older.write_text("<svg/>", encoding="utf-8")
+        broken = copy.deepcopy(real_cfg)
+        broken["apps"][0]["icon"] = "missing-icon.svg"
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                build(broken, stack, out)
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("a missing icon did not fail the build")
+        assert older.exists() and before <= {f.name for f in out.glob("*.svg")}, "stale files removed before the failure"
+        assert (site / "README.md").read_bytes() == readme_before, "README changed by a failed build"
+
+    # the prune pattern matches the generator's own names and nothing broader
+    for n in names.values():
+        assert GENERATED.match(n), n
+    for n in ("notes.svg", "logo.svg", "icon.1234.svg", "hero-dark.xyz12345.svg"):
+        assert not GENERATED.match(n), n
+    print("selftest ok")
     return 0
 
 
